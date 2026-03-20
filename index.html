@@ -772,16 +772,16 @@ async function doClear(){
   var errEl = $id('clearErr');
   if(errEl) errEl.style.display = 'none';
 
-  if(!window._db){
-    if(errEl){ errEl.textContent='Firebase not ready. Try again in a moment.'; errEl.style.display='block'; }
-    return;
-  }
-  if(typeof window._getDocs !== 'function'){
-    if(errEl){ errEl.textContent='ERROR: _getDocs not available. Firebase may not have loaded.'; errEl.style.display='block'; }
-    return;
-  }
-  if(typeof window._deleteDoc !== 'function'){
-    if(errEl){ errEl.textContent='ERROR: _deleteDoc not available. Firebase may not have loaded.'; errEl.style.display='block'; }
+  // Step 1: confirm Firebase is ready
+  var diag = [];
+  diag.push('_db: '+(window._db?'OK':'MISSING'));
+  diag.push('_getDocs: '+(typeof window._getDocs));
+  diag.push('_deleteDoc: '+(typeof window._deleteDoc));
+  diag.push('_col: '+(typeof window._col));
+  diag.push('pres.length: '+pres.length);
+
+  if(!window._db || typeof window._getDocs!=='function' || typeof window._deleteDoc!=='function'){
+    alert('Firebase not ready:\n'+diag.join('\n'));
     return;
   }
 
@@ -790,26 +790,25 @@ async function doClear(){
   var btn = $id('clearBtn');
   if(btn){ btn.textContent='Deleting...'; btn.disabled=true; }
 
-  var deleted = 0, errors = [];
+  var deleted = 0, errors = [], found = 0;
   var maxIdx = Math.max(pres.length, 20);
 
   for(var i = 0; i < maxIdx; i++){
     try{
       var colRef = window._col(window._db, 'presentations/'+i+'/responses');
       var snap = await window._getDocs(colRef);
+      found += snap.size;
       if(snap.empty) continue;
       for(var j = 0; j < snap.docs.length; j++){
         try{
           await window._deleteDoc(snap.docs[j].ref);
           deleted++;
         }catch(de){
-          errors.push('pres '+i+': '+de.message);
+          errors.push('pres '+i+' delete: '+de.message);
         }
       }
     }catch(ge){
-      if(ge.message && ge.message.toLowerCase().includes('permission')){
-        errors.push('Permission denied on pres '+i+': '+ge.message);
-      }
+      errors.push('pres '+i+' read: '+ge.message);
     }
   }
 
@@ -818,12 +817,11 @@ async function doClear(){
   live = {};
   renderByPres(); renderAll(); updateStats();
 
+  // Always show a result alert so we know it ran
   if(errors.length){
-    if(errEl){ errEl.textContent='Errors: '+errors.slice(0,2).join(' | '); errEl.style.display='block'; }
-  } else if(deleted === 0){
-    if(errEl){ errEl.textContent='Nothing deleted - database may already be empty.'; errEl.style.display='block'; }
+    alert('Found '+found+' docs, deleted '+deleted+'.\nErrors:\n'+errors.join('\n'));
   } else {
-    alert('Done! Deleted '+deleted+' response'+(deleted!==1?'s':'')+'.');
+    alert('Done. Found '+found+' docs, deleted '+deleted+'.');
   }
 }
 
